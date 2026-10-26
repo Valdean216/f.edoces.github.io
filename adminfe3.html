@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin - Fedoces</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans text-gray-800">
+
+<div id="loginBox" class="max-w-sm mx-auto mt-24 bg-white p-6 rounded-xl shadow">
+  <h1 class="text-xl font-bold mb-4 text-purple-700">Painel Admin - Fedoces</h1>
+  <input id="email" type="email" placeholder="E-mail" class="w-full border rounded-lg p-2 mb-2">
+  <input id="senha" type="password" placeholder="Senha" class="w-full border rounded-lg p-2 mb-3">
+  <button onclick="login()" class="w-full bg-purple-600 text-white rounded-lg p-2 font-semibold">Entrar</button>
+  <p id="loginErro" class="text-red-500 text-sm mt-2"></p>
+</div>
+
+<div id="painel" class="hidden max-w-4xl mx-auto p-4">
+  <div class="flex justify-between items-center mb-4">
+    <h1 class="text-xl font-bold text-purple-700">Painel Admin - Fedoces</h1>
+    <button onclick="logout()" class="text-sm text-red-500">Sair</button>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow mb-6">
+    <h2 class="font-semibold mb-3" id="formTitulo">Novo produto</h2>
+    <input type="hidden" id="prodId">
+    <div class="grid grid-cols-2 gap-3">
+      <input id="nome" placeholder="Nome" class="border rounded-lg p-2 col-span-2">
+      <input id="preco" type="number" step="0.01" placeholder="Preço" class="border rounded-lg p-2">
+      <select id="categoria" class="border rounded-lg p-2">
+        <option value="doces">Doces</option>
+        <option value="fatias">Fatias</option>
+      </select>
+      <textarea id="descricao" placeholder="Descrição" class="border rounded-lg p-2 col-span-2"></textarea>
+      <label class="col-span-2 flex items-center gap-2">
+        <input type="checkbox" id="disponivel" checked> Disponível
+      </label>
+      <input type="file" id="imagemFile" accept="image/*" class="col-span-2">
+      <img id="preview" class="h-20 hidden col-span-2 rounded-lg object-cover">
+    </div>
+    <div class="flex gap-2 mt-3">
+      <button onclick="salvar()" class="bg-purple-600 text-white rounded-lg px-4 py-2 font-semibold">Salvar</button>
+      <button onclick="limparForm()" class="bg-gray-200 rounded-lg px-4 py-2">Cancelar</button>
+    </div>
+  </div>
+
+  <div id="lista" class="space-y-2"></div>
+</div>
+
+<script>
+const SUPABASE_URL = "https://vqessdmmhviuvantyhys.supabase.co";
+const SUPABASE_KEY = "sb_publishable_o_XnMklzSC9_rutVuF5dPw_LZKDjS8X";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const TABELA = "fedoces";
+
+async function checkSession() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) mostrarPainel(); else mostrarLogin();
+}
+
+function mostrarPainel() {
+  document.getElementById('loginBox').classList.add('hidden');
+  document.getElementById('painel').classList.remove('hidden');
+  carregarProdutos();
+}
+function mostrarLogin() {
+  document.getElementById('loginBox').classList.remove('hidden');
+  document.getElementById('painel').classList.add('hidden');
+}
+
+async function login() {
+  const email = document.getElementById('email').value;
+  const senha = document.getElementById('senha').value;
+  const { error } = await sb.auth.signInWithPassword({ email, password: senha });
+  if (error) { document.getElementById('loginErro').textContent = "E-mail ou senha incorretos."; return; }
+  mostrarPainel();
+}
+async function logout() { await sb.auth.signOut(); mostrarLogin(); }
+
+async function carregarProdutos() {
+  const { data, error } = await sb.from(TABELA).select('*').order('id');
+  const lista = document.getElementById('lista');
+  lista.innerHTML = '';
+  if (error) { lista.innerHTML = `<p class="text-red-500">Erro: ${error.message}</p>`; return; }
+  data.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'bg-white p-3 rounded-xl shadow flex items-center gap-3';
+    row.innerHTML = `
+      <img src="${p.imagem || ''}" class="w-14 h-14 rounded-lg object-cover bg-gray-100">
+      <div class="flex-1">
+        <p class="font-semibold">${p.nome} ${p.disponivel ? '' : '<span class="text-red-500 text-xs">(indisponível)</span>'}</p>
+        <p class="text-sm text-gray-500">R$ ${Number(p.preço).toFixed(2)} · ${p.categoria || '-'}</p>
+      </div>
+      <button onclick='editar(${JSON.stringify(p)})' class="text-purple-600 text-sm font-semibold">Editar</button>
+      <button onclick="apagar(${p.id})" class="text-red-500 text-sm font-semibold">Excluir</button>
+    `;
+    lista.appendChild(row);
+  });
+}
+
+function editar(p) {
+  document.getElementById('formTitulo').textContent = 'Editar produto';
+  document.getElementById('prodId').value = p.id;
+  document.getElementById('nome').value = p.nome;
+  document.getElementById('preco').value = p.preço;
+  document.getElementById('categoria').value = p.categoria || 'doces';
+  document.getElementById('descricao').value = p.descrição || '';
+  document.getElementById('disponivel').checked = p.disponivel;
+  if (p.imagem) {
+    const prev = document.getElementById('preview');
+    prev.src = p.imagem;
+    prev.classList.remove('hidden');
+  }
+  arquivoSelecionado = null;
+  window.scrollTo(0,0);
+}
+
+function limparForm() {
+  document.getElementById('formTitulo').textContent = 'Novo produto';
+  document.getElementById('prodId').value = '';
+  document.getElementById('nome').value = '';
+  document.getElementById('preco').value = '';
+  document.getElementById('categoria').value = 'doces';
+  document.getElementById('descricao').value = '';
+  document.getElementById('disponivel').checked = true;
+  document.getElementById('imagemFile').value = '';
+  document.getElementById('preview').classList.add('hidden');
+  document.getElementById('preview').src = '';
+  arquivoSelecionado = null;
+}
+
+let arquivoSelecionado = null;
+
+document.getElementById('imagemFile').addEventListener('change', e => {
+  const file = e.target.files[0];
+  arquivoSelecionado = file || null;
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const prev = document.getElementById('preview');
+    prev.src = reader.result;
+    prev.classList.remove('hidden');
+  };
+  reader.readAsDataURL(file);
+});
+
+async function uploadImagem(file) {
+  const nomeArquivo = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+  const { error } = await sb.storage.from('produtos').upload(nomeArquivo, file, { upsert: true });
+  if (error) throw error;
+  const { data } = sb.storage.from('produtos').getPublicUrl(nomeArquivo);
+  return data.publicUrl;
+}
+
+async function salvar() {
+  const id = document.getElementById('prodId').value;
+  const payload = {
+    nome: document.getElementById('nome').value,
+    'preço': parseFloat(document.getElementById('preco').value),
+    categoria: document.getElementById('categoria').value,
+    'descrição': document.getElementById('descricao').value,
+    disponivel: document.getElementById('disponivel').checked,
+  };
+
+  if (arquivoSelecionado) {
+    try {
+      payload.imagem = await uploadImagem(arquivoSelecionado);
+    } catch (e) {
+      alert('Erro ao enviar a imagem: ' + e.message);
+      return;
+    }
+  }
+
+  let error;
+  if (id) {
+    ({ error } = await sb.from(TABELA).update(payload).eq('id', id));
+  } else {
+    ({ error } = await sb.from(TABELA).insert(payload));
+  }
+  if (error) { alert('Erro ao salvar: ' + error.message); return; }
+  limparForm();
+  carregarProdutos();
+}
+
+async function apagar(id) {
+  if (!confirm('Excluir este produto?')) return;
+  const { error } = await sb.from(TABELA).delete().eq('id', id);
+  if (error) { alert('Erro: ' + error.message); return; }
+  carregarProdutos();
+}
+
+checkSession();
+</script>
+</body>
+</html>
